@@ -1,0 +1,76 @@
+org: kauelima21
+service: async-report
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: sa-east-1
+  memorySize: 128
+  environment:
+    LEADS_TABLE: !Ref LeadsTable
+    GENERATE_REPORT_QUEUE_RULE: !Ref GenerateReportQueue
+    REPORTS_BUCKET: !Ref ReportsBucket
+  iam:
+    role:
+      statements:
+        # Dynamo
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:Scan
+          Resource: !GetAttr LeadsTable.Arn
+        # SQS
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !GetAttr GenerateReportQueue.Arn
+          Resource: !GetAttr LeadsTable.Arn
+        # S3
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:AbortMultipartUpload
+          Resource:
+            - !GetAttr ReportsBucket.Arn
+            - !Join ['/', [!GetAttr ReportsBucket.Arn, '*']]
+
+package:
+  individually: true
+
+build:
+  esbuild: true
+  minify: true
+  sourcemap: false
+  exclude:
+    - '@aws-sdk/*'
+
+functions:
+  populateDynamoDB:
+    handler: src/functions/http/populateDynamo.handler
+    timeout: 25
+    events:
+      - httpApi:
+          path: /populate-dynamo
+          method: POST
+
+  generateReport:
+    handler: src/functions/http/generateReport.handler
+    events:
+      - httpApi:
+          path: /generateReport
+          method: POST
+
+  proccessReport:
+    handler: src/functions/sqs/proccessReport.handler
+    timeout: 180
+    memorySize: 512
+    events:
+      - sqs:
+          arn: !GetAttr GenerateReportQueue.Arn
+          batchSize: 1
+
+resources:
+  - ${file(resources/dynamodb/LeadsTable.yml)}
+  - ${file(resources/sqs/GenerateReportQueue.yml)}
+  - ${file(resources/s3/ReportsBucket.yml)}

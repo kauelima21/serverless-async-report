@@ -1,0 +1,5 @@
+export const env = {
+  LEADS_TABLE: process.env.LEADS_TABLE!,
+  GENERATE_REPORT_QUEUE_RULE: process.env.GENERATE_REPORT_QUEUE_RULE!,
+  REPORTS_BUCKET: process.env.REPORTS_BUCKET!,
+}
